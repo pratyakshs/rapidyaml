@@ -625,55 +625,86 @@ import ryml
 src = b"{HELLO: a, foo: b, bar: c, baz: d, seq: [0, 1, 2, 3]}"
 
 def check(tree):
-    # for now, only the index-based low-level API is implemented
+    # Print node indices and their keys and values for debugging
+    print("\nNode Indices and Keys:")
+    for i in range(tree.size()):
+        key_mv = tree.key(i)
+        val_mv = tree.val(i)
+        key = bytes(key_mv) if tree.has_key(i) else None
+        val = bytes(val_mv) if tree.has_val(i) else None
+        print(f"Node {i}: Key = {key}, Value = {val}")
+    
+    # For now, only the index-based low-level API is implemented
     assert tree.size() == 10
     assert tree.root_id() == 0
     assert tree.first_child(0) == 1
     assert tree.next_sibling(1) == 2
-    assert tree.first_sibling(5) == 2
+    assert tree.first_sibling(5) == 1
     assert tree.last_sibling(1) == 5
-    # use bytes objects for queries
-    assert tree.find_child(0, b"foo") == 1
-    assert tree.key(1) == b"foo")
-    assert tree.val(1) == b"b")
+
+    # Use bytes objects for queries
+    foo_child = tree.find_child(0, b"foo")
+    print("\nfind_child(0, b'foo') returns:", foo_child)
+    assert foo_child == 2
+    assert bytes(tree.key(1)) == b"HELLO"
+    assert bytes(tree.val(1)) == b"a"
     assert tree.find_child(0, b"seq") == 5
     assert tree.is_seq(5)
-    # to loop over children:
+    
+    # Loop over children
+    print("\nChildren of 'seq':")
     for i, ch in enumerate(ryml.children(tree, 5)):
-        assert tree.val(ch) == [b"0", b"1", b"2", b"3"][i]
-    # to loop over siblings:
+        val = bytes(tree.val(ch))
+        print(f"Child {ch}: Value = {val}")
+        assert val == [b"0", b"1", b"2", b"3"][i]
+    
+    # Loop over siblings
+    print("\nSiblings of Node 5:")
+    sibling_keys = [b"HELLO", b"foo", b"bar", b"baz", b"seq"]
     for i, sib in enumerate(ryml.siblings(tree, 5)):
-        assert tree.key(sib) == [b"HELLO", b"foo", b"bar", b"baz", b"seq"][i]
-    # to walk over all elements
+        key = bytes(tree.key(sib))
+        print(f"Sibling {sib}: Key = {key}")
+        assert key == sibling_keys[i]
+    
+    # Walk over all elements
+    print("\nWalking over all elements:")
     visited = [False] * tree.size()
     for n, indentation_level in ryml.walk(tree):
-        # just a dumb emitter
+        # Just a dumb emitter
         left = "  " * indentation_level
         if tree.is_keyval(n):
-           print("{}{}: {}".format(left, tree.key(n), tree.val(n))
+            key = bytes(tree.key(n))
+            val = bytes(tree.val(n))
+            print("{}{}: {}".format(left, key, val))
         elif tree.is_val(n):
-           print("- {}".format(left, tree.val(n))
-        elif tree.is_keyseq(n):
-           print("{}{}:".format(left, tree.key(n))
-        visited[inode] = True
+            val = bytes(tree.val(n))
+            print("{}- {}".format(left, val))
+        elif tree.is_seq(n) and tree.has_key(n):
+            key = bytes(tree.key(n))
+            print("{}{}:".format(left, key))
+        visited[n] = True
     assert False not in visited
+
     # NOTE about encoding!
-    k = tree.get_key(5)
-    print(k)  # '<memory at 0x7f80d5b93f48>'
-    assert k == b"seq"               # ok, as expected
-    assert k != "seq"                # not ok - NOTE THIS! 
-    assert str(k) != "seq"           # not ok
-    assert str(k, "utf8") == "seq"   # ok again
+    k_mv = tree.key(5)
+    k_bytes = bytes(k_mv)
+    print("\nKey at node 5:", k_bytes)  # b'seq'
+    assert k_bytes == b"seq"               # ok, as expected
+    assert k_bytes != "seq"                # not ok - NOTE THIS!
+    assert str(k_bytes) != "seq"           # not ok
+    assert str(k_bytes, "utf8") == "seq"   # ok again
 
-# parse immutable buffer
+# Parse immutable buffer
+print("Parsing immutable buffer:")
 tree = ryml.parse_in_arena(src)
-check(tree) # OK
+check(tree)  # OK
 
-# parse mutable buffer.
-# requires bytearrays or objects offering writeable memory
+# Parse mutable buffer.
+# Requires bytearrays or objects offering writeable memory
+print("\nParsing mutable buffer:")
 mutable = bytearray(src)
 tree = ryml.parse_in_place(mutable)
-check(tree) # OK
+check(tree)  # OK
 ```
 As expected, the performance results so far are encouraging. In
 a [timeit benchmark](api/python/parse_bm.py) compared
